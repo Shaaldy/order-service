@@ -1,15 +1,35 @@
 package by.shaaldy.orderservice.mapper;
 
-import org.mapstruct.Mapper;
+import java.util.List;
+
+import org.springframework.stereotype.Component;
 
 import by.shaaldy.orderservice.domain.Order;
-import by.shaaldy.orderservice.domain.OrderItem;
 import by.shaaldy.orderservice.dto.OrderItemDto;
 import by.shaaldy.orderservice.dto.OrderResponse;
 
-@Mapper(componentModel = "spring")
-public interface OrderMapper {
-  OrderResponse toResponse(Order order);
+@Component
+public class OrderMapper {
 
-  OrderItem toEntity(OrderItemDto dto);
+  public OrderResponse toResponse(Order order) {
+    List<OrderItemDto> items =
+        order.getItems().stream()
+            .map(
+                item ->
+                    OrderItemDto.builder()
+                        .productName(item.getProductName())
+                        .quantity(item.getQuantity())
+                        .price(item.getPrice())
+                        .build())
+            .toList();
+
+    return OrderResponse.builder()
+        .id(order.getId())
+        .customerId(order.getCustomerId())
+        .status(order.getStatus())
+        .totalAmount(order.getTotalAmount())
+        .items(items)
+        .createdAt(order.getCreatedAt())
+        .build();
+  }
 }
