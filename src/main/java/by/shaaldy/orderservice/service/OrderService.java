@@ -1,0 +1,84 @@
+package by.shaaldy.orderservice.service;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import by.shaaldy.orderservice.domain.Order;
+import by.shaaldy.orderservice.domain.OrderItem;
+import by.shaaldy.orderservice.domain.OrderStatus;
+import by.shaaldy.orderservice.dto.CreateOrderRequest;
+import by.shaaldy.orderservice.dto.OrderResponse;
+import by.shaaldy.orderservice.exception.OrderNotFoundException;
+import by.shaaldy.orderservice.mapper.OrderMapper;
+import by.shaaldy.orderservice.repository.OrderRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class OrderService {
+  private final OrderRepository repository;
+  private final OrderMapper mapper;
+
+  @Transactional
+  public OrderResponse create(CreateOrderRequest request) {
+    Order order =
+        Order.builder()
+            .customerId(request.getCustomerId())
+            .status(OrderStatus.CREATED)
+            .totalAmount(BigDecimal.ZERO)
+            .build();
+
+    request
+        .getItems()
+        .forEach(
+            itemDto -> {
+              OrderItem item =
+                  OrderItem.builder()
+                      .productName(itemDto.getProductName())
+                      .price(itemDto.getPrice())
+                      .quantity(itemDto.getQuantity())
+                      .build();
+              order.addItem(item);
+            });
+
+    BigDecimal total =
+        order.getItems().stream()
+            .map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    order.setTotalAmount(total);
+    Order saved = repository.save(order);
+    log.info(
+        "Created order {} for customer {}, total {}", saved.getId(), saved.getCustomerId(), total);
+    return mapper.toResponse(order);
+  }
+
+  @Transactional(readOnly = true)
+  public OrderResponse getById(UUID id) {
+    Order order = repository.findById(id).orElseThrow(() -> new OrderNotFoundException(id));
+    return mapper.toResponse(order);
+  }
+
+  @Transactional(readOnly = true)
+  public Page<OrderResponse> list(Pageable pageable) {
+    return repository.findAll(pageable).map(mapper::toResponse);
+  }
+
+  @Transactional
+  public OrderResponse cancel(UUID id) {
+    Order order = repository.findById(id).orElseThrow(() -> new OrderNotFoundException(id));
+    if (!order.getStatus().inCancellable()) {
+      throw new IllegalStateException("Cannot cancel order in status " + order.getStatus());
+    }
+
+    order.setStatus(OrderStatus.CANCELLED);
+    Order save = repository.save(order);
+    return mapper.toResponse(save);
+  }
+}

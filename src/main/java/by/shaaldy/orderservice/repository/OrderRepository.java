@@ -1,12 +1,11 @@
 package by.shaaldy.orderservice.repository;
 
-import by.shaaldy.orderservice.entity.Order;
+import java.util.UUID;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.UUID;
+import by.shaaldy.orderservice.domain.Order;
 
 @Repository
-public interface OrderRepository extends JpaRepository<Order, UUID> {
-
-}
+public interface OrderRepository extends JpaRepository<Order, UUID> {}
