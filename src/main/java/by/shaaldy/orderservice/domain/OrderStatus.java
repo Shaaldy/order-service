@@ -7,7 +7,7 @@ public enum OrderStatus {
   CANCELLED,
   FAILED;
 
-  public boolean inCancellable() {
+  public boolean isCancellable() {
     return this == CREATED || this == PAID;
   }
 }

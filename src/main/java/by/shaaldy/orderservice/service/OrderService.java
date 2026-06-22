@@ -28,6 +28,9 @@ public class OrderService {
 
   @Transactional
   public OrderResponse create(CreateOrderRequest request) {
+    if (request.getItems() == null || request.getItems().isEmpty()) {
+      throw new IllegalArgumentException("Order must contain at least one item");
+    }
     Order order =
         Order.builder()
             .customerId(request.getCustomerId())
@@ -60,7 +63,7 @@ public class OrderService {
   }
 
   @Transactional(readOnly = true)
-  public OrderResponse getById(UUID id) {
+  public OrderResponse findById(UUID id) {
     Order order = repository.findById(id).orElseThrow(() -> new OrderNotFoundException(id));
     return mapper.toResponse(order);
   }
@@ -73,7 +76,7 @@ public class OrderService {
   @Transactional
   public OrderResponse cancel(UUID id) {
     Order order = repository.findById(id).orElseThrow(() -> new OrderNotFoundException(id));
-    if (!order.getStatus().inCancellable()) {
+    if (!order.getStatus().isCancellable()) {
       throw new IllegalStateException("Cannot cancel order in status " + order.getStatus());
     }
 

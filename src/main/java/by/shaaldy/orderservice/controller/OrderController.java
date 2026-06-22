@@ -35,7 +35,7 @@ public class OrderController {
 
   @GetMapping("/{id}")
   public OrderResponse getById(@PathVariable UUID id) {
-    return orderService.getById(id);
+    return orderService.findById(id);
   }
 
   @GetMapping
