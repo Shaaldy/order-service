@@ -62,14 +62,15 @@ public class OrderServiceTest {
 
   @ParameterizedTest
   @MethodSource("orderItemsProvide")
-  void create_withMultipleItems_calculatesTotalAmount(List<OrderItemDto> items, BigDecimal totalAmount) {
+  void create_withMultipleItems_calculatesTotalAmount(
+      List<OrderItemDto> items, BigDecimal totalAmount) {
     CreateOrderRequest cro =
         CreateOrderRequest.builder().customerId("testCustomer").items(items).build();
-    when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
 
     ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
     orderService.create(cro);
-    verify(orderRepository).save(captor.capture());
+    verify(orderRepository).saveAndFlush(captor.capture());
     Order saved = captor.getValue();
 
     assertThat(saved.getTotalAmount()).isEqualByComparingTo(totalAmount);
@@ -85,7 +86,7 @@ public class OrderServiceTest {
     assertThatThrownBy(() -> orderService.create(cro))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessage("Order must contain at least one item");
-    verify(orderRepository, never()).save(any(Order.class));
+    verify(orderRepository, never()).saveAndFlush(any(Order.class));
     verify(orderMapper, never()).toResponse(any());
   }
 
@@ -124,10 +125,11 @@ public class OrderServiceTest {
     Order order = Order.builder().id(orderId).status(OrderStatus.CREATED).build();
     when(orderRepository.findById(orderId)).thenReturn(Optional.empty());
     assertThatThrownBy(() -> orderService.cancel(order.getId()))
-            .isInstanceOf(OrderNotFoundException.class)
-            .hasMessage("Order not found: " + orderId);
+        .isInstanceOf(OrderNotFoundException.class)
+        .hasMessage("Order not found: " + orderId);
     verify(orderMapper, never()).toResponse(any());
   }
+
   @Test
   void find_whenOrderNotFound_throwOrderNotFound() {
     UUID orderId = UUID.randomUUID();

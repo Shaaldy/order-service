@@ -56,10 +56,10 @@ public class OrderService {
             .map(i -> i.getPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
     order.setTotalAmount(total);
-    Order saved = repository.save(order);
+    Order saved = repository.saveAndFlush(order);
     log.info(
         "Created order {} for customer {}, total {}", saved.getId(), saved.getCustomerId(), total);
-    return mapper.toResponse(order);
+    return mapper.toResponse(saved);
   }
 
   @Transactional(readOnly = true)
