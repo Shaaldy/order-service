@@ -1,0 +1,26 @@
+services:
+  order-service:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/order_service
+      - SPRING_DATASOURCE_USERNAME=order_user
+      - SPRING_DATASOURCE_PASSWORD=order_pass
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=order_service
+      - POSTGRES_USER=order_user
+      - POSTGRES_PASSWORD=order_pass
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "order_user", "-d", "order_service"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
