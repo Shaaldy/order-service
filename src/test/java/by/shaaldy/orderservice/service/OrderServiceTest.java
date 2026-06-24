@@ -29,6 +29,7 @@ import by.shaaldy.orderservice.dto.OrderItemDto;
 import by.shaaldy.orderservice.exception.OrderNotFoundException;
 import by.shaaldy.orderservice.mapper.OrderMapper;
 import by.shaaldy.orderservice.repository.OrderRepository;
+import jakarta.validation.Valid;
 
 @ExtendWith(MockitoExtension.class)
 public class OrderServiceTest {
@@ -63,7 +64,7 @@ public class OrderServiceTest {
   @ParameterizedTest
   @MethodSource("orderItemsProvide")
   void create_withMultipleItems_calculatesTotalAmount(
-      List<OrderItemDto> items, BigDecimal totalAmount) {
+      List<@Valid OrderItemDto> items, BigDecimal totalAmount) {
     CreateOrderRequest cro =
         CreateOrderRequest.builder().customerId("testCustomer").items(items).build();
     when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -80,7 +81,7 @@ public class OrderServiceTest {
   @Test
   void create_withEmptyItems_throwIllegalArgument() {
 
-    List<OrderItemDto> orderItemDtos = new ArrayList<>();
+    List<@Valid OrderItemDto> orderItemDtos = new ArrayList<>();
     CreateOrderRequest cro =
         CreateOrderRequest.builder().customerId("testCustomer").items(orderItemDtos).build();
     assertThatThrownBy(() -> orderService.create(cro))
