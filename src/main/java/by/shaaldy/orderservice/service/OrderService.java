@@ -15,6 +15,8 @@ import by.shaaldy.orderservice.dto.CreateOrderRequest;
 import by.shaaldy.orderservice.dto.OrderResponse;
 import by.shaaldy.orderservice.exception.OrderNotFoundException;
 import by.shaaldy.orderservice.mapper.OrderMapper;
+import by.shaaldy.orderservice.messaging.OrderEventPublisher;
+import by.shaaldy.orderservice.messaging.event.OrderCreatedEvent;
 import by.shaaldy.orderservice.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 public class OrderService {
   private final OrderRepository repository;
   private final OrderMapper mapper;
+  private final OrderEventPublisher publisher;
 
   @Transactional
   public OrderResponse create(CreateOrderRequest request) {
@@ -59,6 +62,8 @@ public class OrderService {
     Order saved = repository.saveAndFlush(order);
     log.info(
         "Created order {} for customer {}, total {}", saved.getId(), saved.getCustomerId(), total);
+
+    publisher.publish(new OrderCreatedEvent(saved.getId(), saved.getTotalAmount()));
     return mapper.toResponse(saved);
   }
 
@@ -83,5 +88,14 @@ public class OrderService {
     order.setStatus(OrderStatus.CANCELLED);
     Order save = repository.save(order);
     return mapper.toResponse(save);
+  }
+
+  @Transactional
+  public void updatePaymentStatus(UUID orderId, boolean success) {
+    Order order =
+        repository.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
+    order.setStatus(success ? OrderStatus.PAID : OrderStatus.PAYMENT_FAILED);
+    repository.save(order);
+    log.info("Updated order {} status to {}", orderId, order.getStatus());
   }
 }

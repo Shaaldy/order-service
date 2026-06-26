@@ -5,7 +5,7 @@ public enum OrderStatus {
   PAID,
   CONFIRMED,
   CANCELLED,
-  FAILED;
+  PAYMENT_FAILED;
 
   public boolean isCancellable() {
     return this == CREATED || this == PAID;

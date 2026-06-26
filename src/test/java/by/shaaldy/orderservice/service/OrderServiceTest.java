@@ -28,6 +28,8 @@ import by.shaaldy.orderservice.dto.CreateOrderRequest;
 import by.shaaldy.orderservice.dto.OrderItemDto;
 import by.shaaldy.orderservice.exception.OrderNotFoundException;
 import by.shaaldy.orderservice.mapper.OrderMapper;
+import by.shaaldy.orderservice.messaging.OrderEventPublisher;
+import by.shaaldy.orderservice.messaging.event.OrderCreatedEvent;
 import by.shaaldy.orderservice.repository.OrderRepository;
 import jakarta.validation.Valid;
 
@@ -35,7 +37,8 @@ import jakarta.validation.Valid;
 public class OrderServiceTest {
 
   @Mock private OrderRepository orderRepository;
-  @Mock OrderMapper orderMapper;
+  @Mock private OrderMapper orderMapper;
+  @Mock private OrderEventPublisher publisher;
 
   @InjectMocks private OrderService orderService;
 
@@ -68,10 +71,13 @@ public class OrderServiceTest {
     CreateOrderRequest cro =
         CreateOrderRequest.builder().customerId("testCustomer").items(items).build();
     when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+    doNothing().when(publisher).publish(any());
 
     ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
     orderService.create(cro);
     verify(orderRepository).saveAndFlush(captor.capture());
+    verify(publisher).publish(any(OrderCreatedEvent.class));
+
     Order saved = captor.getValue();
 
     assertThat(saved.getTotalAmount()).isEqualByComparingTo(totalAmount);
@@ -107,7 +113,7 @@ public class OrderServiceTest {
   @ParameterizedTest
   @EnumSource(
       value = OrderStatus.class,
-      names = {"CANCELLED", "FAILED", "CONFIRMED"})
+      names = {"CANCELLED", "PAYMENT_FAILED", "CONFIRMED"})
   void cancel_fromNonCancellableStatus_throwIllegalState(OrderStatus status) {
     UUID orderId = UUID.randomUUID();
 

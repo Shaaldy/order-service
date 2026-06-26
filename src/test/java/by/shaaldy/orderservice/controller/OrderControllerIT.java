@@ -18,6 +18,8 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.KafkaContainer;
+import org.testcontainers.utility.DockerImageName;
 
 import by.shaaldy.orderservice.domain.OrderStatus;
 import by.shaaldy.orderservice.dto.OrderResponse;
@@ -28,6 +30,9 @@ import by.shaaldy.orderservice.repository.OrderRepository;
 @Testcontainers
 public class OrderControllerIT {
 
+  @Container
+  static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("apache/kafka:3.7.0"));
+
   @Container static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
 
   @DynamicPropertySource
@@ -35,6 +40,7 @@ public class OrderControllerIT {
     registry.add("spring.datasource.url", postgres::getJdbcUrl);
     registry.add("spring.datasource.username", postgres::getUsername);
     registry.add("spring.datasource.password", postgres::getPassword);
+    registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
   }
 
   @Autowired private RestTestClient restTestClient;
