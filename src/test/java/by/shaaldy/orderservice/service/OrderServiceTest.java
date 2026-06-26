@@ -113,7 +113,7 @@ public class OrderServiceTest {
   @ParameterizedTest
   @EnumSource(
       value = OrderStatus.class,
-      names = {"CANCELLED", "FAILED", "CONFIRMED"})
+      names = {"CANCELLED", "PAYMENT_FAILED", "CONFIRMED"})
   void cancel_fromNonCancellableStatus_throwIllegalState(OrderStatus status) {
     UUID orderId = UUID.randomUUID();
 

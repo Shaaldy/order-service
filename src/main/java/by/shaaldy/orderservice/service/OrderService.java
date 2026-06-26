@@ -89,4 +89,13 @@ public class OrderService {
     Order save = repository.save(order);
     return mapper.toResponse(save);
   }
+
+  @Transactional
+  public void updatePaymentStatus(UUID orderId, boolean success) {
+    Order order =
+        repository.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
+    order.setStatus(success ? OrderStatus.PAID : OrderStatus.PAYMENT_FAILED);
+    repository.save(order);
+    log.info("Updated order {} status to {}", orderId, order.getStatus());
+  }
 }
