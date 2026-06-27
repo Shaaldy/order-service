@@ -41,8 +41,7 @@ public class OrderServiceTest {
   @Mock private OrderRepository orderRepository;
   @Mock private OrderMapper orderMapper;
   @Mock private OutboxRepository outboxRepository;
-  @Spy
-  private ObjectMapper objectMapper = new ObjectMapper();
+  @Spy private ObjectMapper objectMapper = new ObjectMapper();
 
   @InjectMocks private OrderService orderService;
 
@@ -86,6 +85,34 @@ public class OrderServiceTest {
     assertThat(saved.getTotalAmount()).isEqualByComparingTo(totalAmount);
     assertThat(saved.getStatus()).isEqualTo(OrderStatus.CREATED);
   }
+
+  @Test
+  void create_writesOutboxMessage(){
+    CreateOrderRequest request = CreateOrderRequest.builder()
+            .customerId("testCustomer")
+            .items(List.of(itemDto("p1", BigDecimal.valueOf(100), 2)))
+            .build();
+    when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> {
+      Order o = inv.getArgument(0);
+      o.setId(UUID.randomUUID());
+      return o;
+    });
+
+    ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
+    ArgumentCaptor<OutboxMessage> outboxCaptor = ArgumentCaptor.forClass(OutboxMessage.class);
+
+    orderService.create(request);
+
+    verify(orderRepository).saveAndFlush(orderCaptor.capture());
+    verify(outboxRepository).save(outboxCaptor.capture());
+
+    UUID orderId = orderCaptor.getValue().getId();
+    OutboxMessage outbox = outboxCaptor.getValue();
+
+    assertThat(outbox.getTopic()).isEqualTo("order.created");
+    assertThat(outbox.getPayload()).contains(orderId.toString());
+  }
+
 
   @Test
   void create_withEmptyItems_throwIllegalArgument() {
