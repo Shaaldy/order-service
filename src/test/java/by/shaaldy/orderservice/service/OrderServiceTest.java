@@ -87,16 +87,19 @@ public class OrderServiceTest {
   }
 
   @Test
-  void create_writesOutboxMessage(){
-    CreateOrderRequest request = CreateOrderRequest.builder()
+  void create_writesOutboxMessage() {
+    CreateOrderRequest request =
+        CreateOrderRequest.builder()
             .customerId("testCustomer")
             .items(List.of(itemDto("p1", BigDecimal.valueOf(100), 2)))
             .build();
-    when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> {
-      Order o = inv.getArgument(0);
-      o.setId(UUID.randomUUID());
-      return o;
-    });
+    when(orderRepository.saveAndFlush(any(Order.class)))
+        .thenAnswer(
+            inv -> {
+              Order o = inv.getArgument(0);
+              o.setId(UUID.randomUUID());
+              return o;
+            });
 
     ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
     ArgumentCaptor<OutboxMessage> outboxCaptor = ArgumentCaptor.forClass(OutboxMessage.class);
@@ -112,7 +115,6 @@ public class OrderServiceTest {
     assertThat(outbox.getTopic()).isEqualTo("order.created");
     assertThat(outbox.getPayload()).contains(orderId.toString());
   }
-
 
   @Test
   void create_withEmptyItems_throwIllegalArgument() {
