@@ -20,25 +20,28 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import by.shaaldy.orderservice.domain.Order;
 import by.shaaldy.orderservice.domain.OrderStatus;
+import by.shaaldy.orderservice.domain.OutboxMessage;
 import by.shaaldy.orderservice.dto.CreateOrderRequest;
 import by.shaaldy.orderservice.dto.OrderItemDto;
 import by.shaaldy.orderservice.exception.OrderNotFoundException;
 import by.shaaldy.orderservice.mapper.OrderMapper;
-import by.shaaldy.orderservice.messaging.OrderEventPublisher;
-import by.shaaldy.orderservice.messaging.event.OrderCreatedEvent;
 import by.shaaldy.orderservice.repository.OrderRepository;
+import by.shaaldy.orderservice.repository.OutboxRepository;
 import jakarta.validation.Valid;
+import tools.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
 public class OrderServiceTest {
 
   @Mock private OrderRepository orderRepository;
   @Mock private OrderMapper orderMapper;
-  @Mock private OrderEventPublisher publisher;
+  @Mock private OutboxRepository outboxRepository;
+  @Spy private ObjectMapper objectMapper = new ObjectMapper();
 
   @InjectMocks private OrderService orderService;
 
@@ -71,17 +74,46 @@ public class OrderServiceTest {
     CreateOrderRequest cro =
         CreateOrderRequest.builder().customerId("testCustomer").items(items).build();
     when(orderRepository.saveAndFlush(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
-    doNothing().when(publisher).publish(any());
 
     ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
     orderService.create(cro);
     verify(orderRepository).saveAndFlush(captor.capture());
-    verify(publisher).publish(any(OrderCreatedEvent.class));
+    verify(outboxRepository).save(any(OutboxMessage.class));
 
     Order saved = captor.getValue();
 
     assertThat(saved.getTotalAmount()).isEqualByComparingTo(totalAmount);
     assertThat(saved.getStatus()).isEqualTo(OrderStatus.CREATED);
+  }
+
+  @Test
+  void create_writesOutboxMessage() {
+    CreateOrderRequest request =
+        CreateOrderRequest.builder()
+            .customerId("testCustomer")
+            .items(List.of(itemDto("p1", BigDecimal.valueOf(100), 2)))
+            .build();
+    when(orderRepository.saveAndFlush(any(Order.class)))
+        .thenAnswer(
+            inv -> {
+              Order o = inv.getArgument(0);
+              o.setId(UUID.randomUUID());
+              return o;
+            });
+
+    ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
+    ArgumentCaptor<OutboxMessage> outboxCaptor = ArgumentCaptor.forClass(OutboxMessage.class);
+
+    orderService.create(request);
+
+    verify(orderRepository).saveAndFlush(orderCaptor.capture());
+    verify(outboxRepository).save(outboxCaptor.capture());
+
+    UUID orderId = orderCaptor.getValue().getId();
+    OutboxMessage outbox = outboxCaptor.getValue();
+
+    assertThat(outbox.getTopic()).isEqualTo("order.created");
+    assertThat(outbox.getPayload()).contains(orderId.toString());
   }
 
   @Test

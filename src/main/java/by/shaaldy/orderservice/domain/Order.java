@@ -18,12 +18,7 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(
-    name = "orders",
-    indexes = {
-      @Index(name = "idx_orders_status", columnList = "status"),
-      @Index(name = "idx_orders_customer", columnList = "customer_id")
-    })
+@Table(name = "orders")
 public class Order {
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
