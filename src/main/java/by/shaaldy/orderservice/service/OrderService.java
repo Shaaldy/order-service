@@ -3,8 +3,6 @@ package by.shaaldy.orderservice.service;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-import by.shaaldy.orderservice.messaging.event.OrderCancelledEvent;
-import by.shaaldy.orderservice.messaging.event.PaymentProcessedEvent;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -18,7 +16,8 @@ import by.shaaldy.orderservice.dto.CreateOrderRequest;
 import by.shaaldy.orderservice.dto.OrderResponse;
 import by.shaaldy.orderservice.exception.OrderNotFoundException;
 import by.shaaldy.orderservice.mapper.OrderMapper;
-import by.shaaldy.orderservice.messaging.event.OrderCreatedEvent;
+import by.shaaldy.orderservice.messaging.event.payment.OrderCreatedEvent;
+import by.shaaldy.orderservice.messaging.event.refund.OrderCancelledEvent;
 import by.shaaldy.orderservice.repository.OrderRepository;
 import by.shaaldy.orderservice.repository.OutboxRepository;
 import lombok.RequiredArgsConstructor;
@@ -67,7 +66,7 @@ public class OrderService {
   @Transactional
   public OrderResponse cancel(UUID id) {
     Order order = repository.findById(id).orElseThrow(() -> new OrderNotFoundException(id));
-    switch (order.getStatus()){
+    switch (order.getStatus()) {
       case PAID -> {
         order.setStatus(OrderStatus.CANCELLING);
         String toPayload = objectMapper.writeValueAsString(new OrderCancelledEvent(order.getId()));
@@ -75,7 +74,8 @@ public class OrderService {
       }
       case CREATED -> order.setStatus(OrderStatus.CANCELLED);
       case CANCELLED, CANCELLING -> {}
-      case PAYMENT_FAILED -> throw new IllegalStateException("Cannot cancel order in status " + order.getStatus());
+      case PAYMENT_FAILED ->
+          throw new IllegalStateException("Cannot cancel order in status " + order.getStatus());
     }
     return mapper.toResponse(order);
   }
@@ -85,8 +85,24 @@ public class OrderService {
     Order order =
         repository.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
     order.setStatus(success ? OrderStatus.PAID : OrderStatus.PAYMENT_FAILED);
-    repository.save(order);
     log.info("Updated order {} status to {}", orderId, order.getStatus());
+  }
+
+  @Transactional
+  public void updateCancel(UUID orderId) {
+
+    Order order =
+        repository.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
+    if (order.getStatus() == OrderStatus.CANCELLED) {
+      log.debug("Duplicate payment.refunded for already-cancelled order {}", orderId);
+      return;
+    }
+    if (order.getStatus() != OrderStatus.CANCELLING) {
+      log.warn("payment.refunded for order {} in unexpected status {}", orderId, order.getStatus());
+      return;
+    }
+    order.setStatus(OrderStatus.CANCELLED);
+    log.info("Order {} cancelled (refund confirmed)", orderId);
   }
 
   private Order buildOrder(CreateOrderRequest req) {
@@ -119,8 +135,7 @@ public class OrderService {
   }
 
   private void publishToOutbox(String toPayLoad, String topic) {
-    OutboxMessage message =
-        OutboxMessage.builder().topic(topic).payload(toPayLoad).build();
+    OutboxMessage message = OutboxMessage.builder().topic(topic).payload(toPayLoad).build();
     outboxRepository.save(message);
   }
 }
