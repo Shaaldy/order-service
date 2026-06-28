@@ -1,4 +1,4 @@
-package by.shaaldy.orderservice.service;
+package by.shaaldy.orderservice.messaging;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,11 +16,11 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class OutboxService {
+public class OutboxRelay {
   private final OutboxRepository outboxRepository;
   private final KafkaTemplate<String, String> kafkaTemplate;
 
-  @Scheduled(fixedDelay = 5000)
+  @Scheduled(fixedDelayString = "${outbox.poll-interval:5000}")
   public void publish() {
     List<OutboxMessage> messages = outboxRepository.findAllByOrderByCreatedAtAsc();
     List<UUID> sentIds = new ArrayList<>();

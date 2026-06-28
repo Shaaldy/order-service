@@ -1,5 +1,8 @@
 package by.shaaldy.orderservice.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.HashMap;
@@ -8,46 +11,21 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.StreamSupport;
 
-import by.shaaldy.orderservice.dto.CreateOrderRequest;
-import by.shaaldy.orderservice.dto.OrderItemDto;
-import by.shaaldy.orderservice.dto.OrderResponse;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.test.utils.KafkaTestUtils;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.kafka.KafkaContainer;
-import org.testcontainers.utility.DockerImageName;
 
+import by.shaaldy.orderservice.dto.CreateOrderRequest;
+import by.shaaldy.orderservice.dto.OrderItemDto;
+import by.shaaldy.orderservice.dto.OrderResponse;
 import by.shaaldy.orderservice.repository.OrderRepository;
 import by.shaaldy.orderservice.repository.OutboxRepository;
 import by.shaaldy.orderservice.service.OrderService;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
-
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers
-public class OutboxIT {
-  @Container
-  static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("apache/kafka:3.7.0"));
-
-  @Container static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
-
-  @DynamicPropertySource
-  static void props(DynamicPropertyRegistry registry) {
-    registry.add("spring.datasource.url", postgres::getJdbcUrl);
-    registry.add("spring.datasource.username", postgres::getUsername);
-    registry.add("spring.datasource.password", postgres::getPassword);
-    registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
-  }
+public class OutboxIT extends AbstractIntegrationTest {
 
   @Autowired private OrderService orderService;
   @Autowired private OrderRepository orderRepository;
@@ -72,37 +50,44 @@ public class OutboxIT {
     return consumer;
   }
 
-    @Test
-    void outbox_publishesEventAndClearsOutbox() {
-        // 1. Arrange — собрать запрос
-        CreateOrderRequest request = CreateOrderRequest.builder()
-                .customerId("testCustomer")
-                .items(List.of(OrderItemDto.builder().productName("p1").price(BigDecimal.valueOf(20000)).quantity(10).build()))
-                .build();
+  @Test
+  void outbox_publishesEventAndClearsOutbox() {
+    // 1. Arrange — собрать запрос
+    CreateOrderRequest request =
+        CreateOrderRequest.builder()
+            .customerId("testCustomer")
+            .items(
+                List.of(
+                    OrderItemDto.builder()
+                        .productName("p1")
+                        .price(BigDecimal.valueOf(20000))
+                        .quantity(10)
+                        .build()))
+            .build();
 
-        // 2. Act — создать заказ (запись в БД + outbox в транзакции)
-        OrderResponse response = orderService.create(request);
-        UUID orderId = response.getId();   // понадобится для фильтрации события
+    // 2. Act — создать заказ (запись в БД + outbox в транзакции)
+    OrderResponse response = orderService.create(request);
+    UUID orderId = response.getId(); // понадобится для фильтрации события
 
-        // 3. Assert — две проверки:
+    // 3. Assert — две проверки:
 
-        //   (а) outbox опустел (почтальон унёс) — АСИНХРОННО → Awaitility
-        await().atMost(Duration.ofSeconds(15))
-                .until(() -> outboxRepository.count() == 0);
+    //   (а) outbox опустел (почтальон унёс) — АСИНХРОННО → Awaitility
+    await().atMost(Duration.ofSeconds(15)).until(() -> outboxRepository.count() == 0);
 
-        //   (б) событие реально в топике — прочитать консьюмером
-        try (Consumer<String, String> consumer = createConsumer()) {
-            ConsumerRecords<String, String> records =
-                    KafkaTestUtils.getRecords(consumer, Duration.ofSeconds(10));
+    //   (б) событие реально в топике — прочитать консьюмером
+    try (Consumer<String, String> consumer = createConsumer()) {
+      ConsumerRecords<String, String> records =
+          KafkaTestUtils.getRecords(consumer, Duration.ofSeconds(10));
 
-            // найти ИМЕННО наше событие по orderId (фильтр, не getSingleRecord)
-            String payload = StreamSupport.stream(records.spliterator(), false)
-                    .map(ConsumerRecord::value)
-                    .filter(v -> v.contains(orderId.toString()))
-                    .findFirst()
-                    .orElseThrow();
+      // найти ИМЕННО наше событие по orderId (фильтр, не getSingleRecord)
+      String payload =
+          StreamSupport.stream(records.spliterator(), false)
+              .map(ConsumerRecord::value)
+              .filter(v -> v.contains(orderId.toString()))
+              .findFirst()
+              .orElseThrow();
 
-            assertThat(payload).contains(orderId.toString());
-        }
+      assertThat(payload).contains(orderId.toString());
     }
+  }
 }
