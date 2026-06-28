@@ -15,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -28,6 +27,7 @@ import by.shaaldy.orderservice.domain.OrderStatus;
 import by.shaaldy.orderservice.domain.OutboxMessage;
 import by.shaaldy.orderservice.dto.CreateOrderRequest;
 import by.shaaldy.orderservice.dto.OrderItemDto;
+import by.shaaldy.orderservice.dto.OrderResponse;
 import by.shaaldy.orderservice.exception.OrderNotFoundException;
 import by.shaaldy.orderservice.mapper.OrderMapper;
 import by.shaaldy.orderservice.repository.OrderRepository;
@@ -129,33 +129,6 @@ public class OrderServiceTest {
     verify(orderMapper, never()).toResponse(any());
   }
 
-  @ParameterizedTest
-  @EnumSource(
-      value = OrderStatus.class,
-      names = {"PAID"})
-  void cancel_fromCancellableStatus_setsCancelled(OrderStatus status) {
-    UUID orderId = UUID.randomUUID();
-    Order order = Order.builder().id(orderId).status(status).build();
-    when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-    orderService.cancel(order.getId());
-    assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLING);
-  }
-
-  @ParameterizedTest
-  @EnumSource(
-      value = OrderStatus.class,
-      names = {"PAYMENT_FAILED"})
-  void cancel_fromNonCancellableStatus_throwIllegalState(OrderStatus status) {
-    UUID orderId = UUID.randomUUID();
-
-    Order order = Order.builder().id(orderId).status(status).build();
-    when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-    assertThatThrownBy(() -> orderService.cancel(order.getId()))
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessage("Cannot cancel order in status " + status);
-    verify(orderMapper, never()).toResponse(any());
-  }
-
   @Test
   void cancel_whenOrderNotFound_throwOrderNotFound() {
     UUID orderId = UUID.randomUUID();
@@ -175,5 +148,77 @@ public class OrderServiceTest {
         .isInstanceOf(OrderNotFoundException.class)
         .hasMessage("Order not found: " + orderId);
     verify(orderMapper, never()).toResponse(any());
+  }
+
+  @Test
+  void cancel_paidOrder_setsCancellingAndPublishes() {
+    UUID id = UUID.randomUUID();
+    Order order =
+        Order.builder()
+            .customerId("alice")
+            .status(OrderStatus.PAID)
+            .totalAmount(new BigDecimal("100.00"))
+            .build();
+    order.setId(id);
+
+    when(orderRepository.findById(id)).thenReturn(Optional.of(order));
+    // mapper.toResponse вызовется в конце — замокай, чтобы не было NPE:
+    when(orderMapper.toResponse(order)).thenReturn(OrderResponse.builder().build());
+
+    orderService.cancel(id);
+
+    // 1. статус заказа стал CANCELLING (проверяй на объекте order — dirty checking)
+    assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLING);
+
+    // 2. в outbox легло событие в топик "order.cancelled"
+    ArgumentCaptor<OutboxMessage> captor = ArgumentCaptor.forClass(OutboxMessage.class);
+    verify(outboxRepository).save(captor.capture());
+    assertThat(captor.getValue().getTopic()).isEqualTo("order.cancelled");
+  }
+
+  @Test
+  void cancel_paymentFailedOrder_throws() {
+    UUID id = UUID.randomUUID();
+    Order order = Order.builder().id(id).status(OrderStatus.PAYMENT_FAILED).build();
+    when(orderRepository.findById(id)).thenReturn(Optional.of(order));
+
+    assertThatThrownBy(() -> orderService.cancel(id))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("Cannot cancel order in status PAYMENT_FAILED");
+
+    verify(outboxRepository, never()).save(any());
+  }
+
+  @Test
+  void cancel_createdOrder_cancelsLocallyWithoutOutbox() {
+    UUID id = UUID.randomUUID();
+    Order order = Order.builder().status(OrderStatus.CREATED).build();
+    order.setId(id);
+    when(orderRepository.findById(id)).thenReturn(Optional.of(order));
+    orderService.cancel(id);
+    assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+    verify(outboxRepository, never()).save(any());
+  }
+
+  @Test
+  void cancel_alreadyCancelled_isNoOp() {
+    UUID id = UUID.randomUUID();
+    Order order = Order.builder().status(OrderStatus.CANCELLED).build();
+    order.setId(id);
+    when(orderRepository.findById(id)).thenReturn(Optional.of(order));
+    orderService.cancel(id);
+    assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+    verify(outboxRepository, never()).save(any());
+  }
+
+  @Test
+  void cancel_cancelling_isNoOp() {
+    UUID id = UUID.randomUUID();
+    Order order = Order.builder().status(OrderStatus.CANCELLING).build();
+    order.setId(id);
+    when(orderRepository.findById(id)).thenReturn(Optional.of(order));
+    orderService.cancel(id);
+    assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLING);
+    verify(outboxRepository, never()).save(any());
   }
 }
