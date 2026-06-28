@@ -15,14 +15,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 
 import by.shaaldy.orderservice.domain.OutboxMessage;
+import by.shaaldy.orderservice.messaging.OutboxRelay;
 import by.shaaldy.orderservice.repository.OutboxRepository;
 
 @ExtendWith(MockitoExtension.class)
-public class OutboxServiceTest {
+public class OutboxRelayTest {
   @Mock private OutboxRepository outboxRepository;
   @Mock private KafkaTemplate<String, String> kafkaTemplate;
 
-  @InjectMocks private OutboxService outboxService;
+  @InjectMocks private OutboxRelay outboxRelay;
 
   @SuppressWarnings("unchecked")
   @Test
@@ -37,7 +38,7 @@ public class OutboxServiceTest {
     when(kafkaTemplate.send(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
     ArgumentCaptor<List<UUID>> captor = ArgumentCaptor.forClass(List.class);
 
-    outboxService.publish();
+    outboxRelay.publish();
 
     verify(kafkaTemplate).send(message.getTopic(), message.getPayload());
     verify(outboxRepository).deleteAllById(captor.capture());
@@ -56,7 +57,7 @@ public class OutboxServiceTest {
     when(kafkaTemplate.send(any(), any()))
         .thenReturn(CompletableFuture.failedFuture(new RuntimeException("kafka down")));
 
-    outboxService.publish();
+    outboxRelay.publish();
 
     verify(kafkaTemplate).send(message.getTopic(), message.getPayload());
     verify(outboxRepository, never()).deleteAllById(any());
