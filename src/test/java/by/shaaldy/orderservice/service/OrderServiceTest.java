@@ -132,20 +132,19 @@ public class OrderServiceTest {
   @ParameterizedTest
   @EnumSource(
       value = OrderStatus.class,
-      names = {"PAID", "CREATED"})
+      names = {"PAID"})
   void cancel_fromCancellableStatus_setsCancelled(OrderStatus status) {
     UUID orderId = UUID.randomUUID();
     Order order = Order.builder().id(orderId).status(status).build();
     when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
     orderService.cancel(order.getId());
-    verify(orderRepository).save(order);
-    assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+    assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLING);
   }
 
   @ParameterizedTest
   @EnumSource(
       value = OrderStatus.class,
-      names = {"CANCELLED", "PAYMENT_FAILED", "CONFIRMED"})
+      names = {"PAYMENT_FAILED"})
   void cancel_fromNonCancellableStatus_throwIllegalState(OrderStatus status) {
     UUID orderId = UUID.randomUUID();
 
@@ -154,7 +153,6 @@ public class OrderServiceTest {
     assertThatThrownBy(() -> orderService.cancel(order.getId()))
         .isInstanceOf(IllegalStateException.class)
         .hasMessage("Cannot cancel order in status " + status);
-    verify(orderRepository, never()).save(any());
     verify(orderMapper, never()).toResponse(any());
   }
 

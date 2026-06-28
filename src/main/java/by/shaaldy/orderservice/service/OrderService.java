@@ -3,6 +3,8 @@ package by.shaaldy.orderservice.service;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+import by.shaaldy.orderservice.messaging.event.OrderCancelledEvent;
+import by.shaaldy.orderservice.messaging.event.PaymentProcessedEvent;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -45,8 +47,9 @@ public class OrderService {
         saved.getId(),
         saved.getCustomerId(),
         saved.getTotalAmount());
-
-    publishToOutbox(saved.getId(), saved.getTotalAmount());
+    OrderCreatedEvent event = new OrderCreatedEvent(saved.getId(), saved.getTotalAmount());
+    String toPayload = objectMapper.writeValueAsString(event);
+    publishToOutbox(toPayload, "order.created");
     return mapper.toResponse(saved);
   }
 
@@ -64,13 +67,17 @@ public class OrderService {
   @Transactional
   public OrderResponse cancel(UUID id) {
     Order order = repository.findById(id).orElseThrow(() -> new OrderNotFoundException(id));
-    if (!order.getStatus().isCancellable()) {
-      throw new IllegalStateException("Cannot cancel order in status " + order.getStatus());
+    switch (order.getStatus()){
+      case PAID -> {
+        order.setStatus(OrderStatus.CANCELLING);
+        String toPayload = objectMapper.writeValueAsString(new OrderCancelledEvent(order.getId()));
+        publishToOutbox(toPayload, "order.cancelled");
+      }
+      case CREATED -> order.setStatus(OrderStatus.CANCELLED);
+      case CANCELLED, CANCELLING -> {}
+      case PAYMENT_FAILED -> throw new IllegalStateException("Cannot cancel order in status " + order.getStatus());
     }
-
-    order.setStatus(OrderStatus.CANCELLED);
-    Order save = repository.save(order);
-    return mapper.toResponse(save);
+    return mapper.toResponse(order);
   }
 
   @Transactional
@@ -111,11 +118,9 @@ public class OrderService {
         .reduce(BigDecimal.ZERO, BigDecimal::add);
   }
 
-  private void publishToOutbox(UUID id, BigDecimal total) {
-    OrderCreatedEvent event = new OrderCreatedEvent(id, total);
-    String toPayload = objectMapper.writeValueAsString(event);
+  private void publishToOutbox(String toPayLoad, String topic) {
     OutboxMessage message =
-        OutboxMessage.builder().topic("order.created").payload(toPayload).build();
+        OutboxMessage.builder().topic(topic).payload(toPayLoad).build();
     outboxRepository.save(message);
   }
 }
