@@ -2,12 +2,13 @@ package by.shaaldy.orderservice.messaging;
 
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-import tools.jackson.databind.ObjectMapper;
+
 import by.shaaldy.orderservice.messaging.event.payment.PaymentProcessedEvent;
 import by.shaaldy.orderservice.messaging.event.refund.RefundProcessedEvent;
 import by.shaaldy.orderservice.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import tools.jackson.databind.ObjectMapper;
 
 @Component
 @RequiredArgsConstructor
@@ -15,10 +16,11 @@ import lombok.extern.slf4j.Slf4j;
 public class PaymentEventListener {
   private final OrderService orderService;
   private final ObjectMapper objectMapper;
+
   @KafkaListener(topics = "payment.processed", groupId = "order-service")
   public void onPaymentProcessed(String payLoad) {
-      PaymentProcessedEvent event = objectMapper.readValue(payLoad, PaymentProcessedEvent.class);
-      log.info("Received payment.processed for order {}", event.orderId());
+    PaymentProcessedEvent event = objectMapper.readValue(payLoad, PaymentProcessedEvent.class);
+    log.info("Received payment.processed for order {}", event.orderId());
     orderService.updatePaymentStatus(event.orderId(), event.success());
   }
 
