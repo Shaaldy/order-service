@@ -257,6 +257,6 @@ public class OrderServiceTest {
     UUID id = UUID.randomUUID();
     when(orderRepository.findById(id)).thenReturn(Optional.empty());
     assertThatThrownBy(() -> orderService.updateCancel(id))
-            .isInstanceOf(OrderNotFoundException.class);
+        .isInstanceOf(OrderNotFoundException.class);
   }
 }
