@@ -65,21 +65,13 @@ public class OutboxIT extends AbstractIntegrationTest {
                         .build()))
             .build();
 
-    // 2. Act — создать заказ (запись в БД + outbox в транзакции)
     OrderResponse response = orderService.create(request);
     UUID orderId = response.getId(); // понадобится для фильтрации события
-
-    // 3. Assert — две проверки:
-
-    //   (а) outbox опустел (почтальон унёс) — АСИНХРОННО → Awaitility
     await().atMost(Duration.ofSeconds(15)).until(() -> outboxRepository.count() == 0);
 
-    //   (б) событие реально в топике — прочитать консьюмером
     try (Consumer<String, String> consumer = createConsumer()) {
       ConsumerRecords<String, String> records =
           KafkaTestUtils.getRecords(consumer, Duration.ofSeconds(10));
-
-      // найти ИМЕННО наше событие по orderId (фильтр, не getSingleRecord)
       String payload =
           StreamSupport.stream(records.spliterator(), false)
               .map(ConsumerRecord::value)

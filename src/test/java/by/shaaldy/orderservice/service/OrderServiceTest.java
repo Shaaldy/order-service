@@ -221,4 +221,42 @@ public class OrderServiceTest {
     assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLING);
     verify(outboxRepository, never()).save(any());
   }
+
+  @Test
+  void updateCancel_fromCancelling_setsCancelled() {
+    UUID id = UUID.randomUUID();
+    Order order = Order.builder().status(OrderStatus.CANCELLING).build();
+    order.setId(id);
+    when(orderRepository.findById(id)).thenReturn(Optional.of(order));
+    orderService.updateCancel(id);
+    assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+  }
+
+  @Test
+  void updateCancel_alreadyCancelled_isNoOp() {
+    UUID id = UUID.randomUUID();
+    Order order = Order.builder().status(OrderStatus.CANCELLED).build();
+    order.setId(id);
+    when(orderRepository.findById(id)).thenReturn(Optional.of(order));
+    orderService.updateCancel(id);
+    assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+  }
+
+  @Test
+  void updateCancel_unexpectedStatus_isNoOp() {
+    UUID id = UUID.randomUUID();
+    Order order = Order.builder().status(OrderStatus.PAID).build();
+    order.setId(id);
+    when(orderRepository.findById(id)).thenReturn(Optional.of(order));
+    orderService.updateCancel(id);
+    assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+  }
+
+  @Test
+  void updateCancel_whenOrderNotFound_throwOrderNotFound() {
+    UUID id = UUID.randomUUID();
+    when(orderRepository.findById(id)).thenReturn(Optional.empty());
+    assertThatThrownBy(() -> orderService.updateCancel(id))
+            .isInstanceOf(OrderNotFoundException.class);
+  }
 }

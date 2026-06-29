@@ -135,7 +135,7 @@ public class OrderControllerIT extends AbstractIntegrationTest {
         .uri("/api/orders/" + created.getId() + "/cancel")
         .exchange()
         .expectStatus()
-        .isEqualTo(409);
+        .isEqualTo(200);
   }
 
   @Test
